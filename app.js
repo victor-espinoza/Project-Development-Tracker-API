@@ -50,32 +50,98 @@ connection.connect((err) => {
     console.log('Database created/exists');
     connection.changeUser({database: process.env.DBNAME}, (err) => {
       if (err) throw new Error(err);
-      createTable();
+      console.log('Changed user');
+      //create all of the necessary tables for the project if they aren't created yet.
+      const projectDefinition = `project (
+        project_id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+        name VARCHAR(100), 
+        owner VARCHAR(100) NOT NULL,
+        status_flag VARCHAR(50),
+        focus_flag BOOLEAN,
+        start_date DATE,
+        due_date DATE
+      )`
+      createTable(projectDefinition);
+
+      //sprint table definition
+      const sprintDefinition = `sprint (
+        sprint_id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+        project_id INT NOT NULL,
+        status_flag VARCHAR(50),
+        start_date DATE,
+        due_date DATE, 
+        sprint_result BOOLEAN,
+        CONSTRAINT fk_project 
+        FOREIGN KEY (project_id) 
+        REFERENCES project(project_id)
+          ON UPDATE CASCADE
+          ON DELETE CASCADE
+      )`
+      createTable(sprintDefinition);
+
+      //task table definition
+      const taskDefinition = `task (
+        task_id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+        sprint_id INT,
+        project_id INT,
+        status_flag VARCHAR(50),
+        task_owner VARCHAR(100),
+        start_date DATE,
+        end_date DATE, 
+        CONSTRAINT fk_project_task 
+        FOREIGN KEY (project_id) 
+        REFERENCES project(project_id)
+          ON UPDATE CASCADE
+          ON DELETE CASCADE,
+        CONSTRAINT fk_sprint 
+        FOREIGN KEY (sprint_id) 
+        REFERENCES sprint(sprint_id)
+          ON UPDATE CASCADE
+          ON DELETE CASCADE
+      )`
+      createTable(taskDefinition);
+
+
     });
   });
 });
 
 
 //Create a database table
-function createTable() {
-  connection.query(`CREATE TABLE IF NOT EXISTS project (
-      project_id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
-      name VARCHAR(100), 
-      owner VARCHAR(100),
-      status_flag VARCHAR(50),
-      start_date DATE,
-      end_date DATE
-  )`, (err) => {
+function createTable(tableDefinition) {
+  connection.query(`CREATE TABLE IF NOT EXISTS ${tableDefinition}`, (err) => {
     if (err) throw new Error(err);
     console.log('Table created/exists');
   });
 }
 
 
-app.post('/api', (req, res) => {
-  connection.query('INSERT INTO users SET ?', {
+//create- app.post('/api', ...) (res.end())
+//read- app.get('/api', ...) (res.send())
+//update- app.put('/api', ...) (res.end())
+//delete- app.delete('/api', ...) (res.end())
 
-  })
+app.post('/api', (req, res) => {
+  connection.query('INSERT INTO project SET ?', {
+    name: 'Project Development Tracker',
+    owner: 'Vic',
+    status_flag: 'In Progress',
+    focus_flag: false,
+    start_date: '2023-11-15'
+  }, (err) => {
+    if (err) throw new Error(err);
+    console.log('Inserted record into table');
+    res.end(); //end the request
+  });
+});
+
+app.get('/api', (req, res) => {
+  connection.query(`SELECT * FROM project`, (err, result) => {
+    if (err) throw new Error(err);
+    const json = JSON.stringify(result);
+    console.log(json);
+    res.send(json);
+  });
 });
 
 
@@ -161,6 +227,15 @@ app.get('/delete-sprint', jwtCheck, checkDeleteSprintScope, (req, res) => {
 app.get('/create-project', jwtCheck, checkCreateProjectScope, (req, res) => {
   // req.auth.payload.sub //userid from auth0
   res.json({type: "Create Authorized Sprint (requires create:project permission)"});
+});
+
+
+app.post('/create-project', jwtCheck, checkCreateProjectScope, (req, res) => {
+  // req.auth.payload.sub //userid from auth0
+  //res.json({type: "Create Authorized Sprint (requires create:project permission)"});
+  // var newID = req.body.ID;
+  // res.redirect("/action")
+  res.end();
 });
 
 

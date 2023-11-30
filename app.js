@@ -44,13 +44,10 @@ const connection = mysql.createConnection({
 //Connect to Database
 connection.connect((err) => {
   if (err) throw new Error(err);
-  console.log("Connected");
-  connection.query('CREATE DATABASE IF NOT EXISTS project_development_db', (err) => {
+  connection.query(`CREATE DATABASE IF NOT EXISTS ${process.env.DBNAME}`, (err) => {
     if (err) throw new Error(err);
-    console.log('Database created/exists');
     connection.changeUser({database: process.env.DBNAME}, (err) => {
       if (err) throw new Error(err);
-      console.log('Changed user');
       //create all of the necessary tables for the project if they aren't created yet.
       const projectDefinition = `project (
         project_id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
@@ -100,8 +97,6 @@ connection.connect((err) => {
           ON DELETE CASCADE
       )`
       createTable(taskDefinition);
-
-
     });
   });
 });
@@ -111,7 +106,6 @@ connection.connect((err) => {
 function createTable(tableDefinition) {
   connection.query(`CREATE TABLE IF NOT EXISTS ${tableDefinition}`, (err) => {
     if (err) throw new Error(err);
-    console.log('Table created/exists');
   });
 }
 
@@ -120,29 +114,6 @@ function createTable(tableDefinition) {
 //read- app.get('/api', ...) (res.send())
 //update- app.put('/api', ...) (res.end())
 //delete- app.delete('/api', ...) (res.end())
-
-app.post('/api', (req, res) => {
-  connection.query('INSERT INTO project SET ?', {
-    name: 'Project Development Tracker',
-    owner: 'Vic',
-    status_flag: 'In Progress',
-    focus_flag: false,
-    start_date: '2023-11-15'
-  }, (err) => {
-    if (err) throw new Error(err);
-    console.log('Inserted record into table');
-    res.end(); //end the request
-  });
-});
-
-app.get('/api', (req, res) => {
-  connection.query(`SELECT * FROM project`, (err, result) => {
-    if (err) throw new Error(err);
-    const json = JSON.stringify(result);
-    console.log(json);
-    res.send(json);
-  });
-});
 
 
 
@@ -171,7 +142,11 @@ app.get('/sprints-overview', jwtCheck, checkReadSprintScope, (req, res) => {
 
 //must have access to the project-data-api and the read:task permission in order to visit the page
 app.get('/projects-overview', jwtCheck, checkReadProjectScope, (req, res) => {
-  res.json({type: "Read Authorized Projects (requires read:project permission)"});
+  connection.query(`SELECT * FROM project`, (err, result) => {
+    if (err) throw new Error(err);
+    const json = JSON.stringify(result);
+    res.send(json);
+  });
 });
 
 
@@ -231,12 +206,27 @@ app.get('/create-project', jwtCheck, checkCreateProjectScope, (req, res) => {
 
 
 app.post('/create-project', jwtCheck, checkCreateProjectScope, (req, res) => {
-  // req.auth.payload.sub //userid from auth0
-  //res.json({type: "Create Authorized Sprint (requires create:project permission)"});
-  // var newID = req.body.ID;
-  // res.redirect("/action")
-  res.end();
+  //console.log(req.body.data);
+  const name = req.body.data.newName;
+  const owner = req.auth.payload.sub;
+  const status = req.body.data.newStatus;
+  const startDate = req.body.data.newStartDate;
+  const dueDate = req.body.data.newDueDate;
+  connection.query('INSERT INTO project SET ?', {
+    name: name,
+    owner: owner,
+    status_flag: status,
+    focus_flag: false,
+    start_date: startDate,
+    due_date: dueDate
+  }, (err) => {
+    if (err) throw new Error(err);
+    console.log('Inserted record into table');
+    res.end(); //end the request
+  });
+  res.send('Data received');
 });
+
 
 
 //must have access to the project-data-api and the read:sprint permission in order to visit the page

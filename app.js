@@ -64,7 +64,9 @@ connection.connect((err) => {
       const sprintDefinition = `sprint (
         sprint_id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
         project_id INT NOT NULL,
+        name VARCHAR(100), 
         status_flag VARCHAR(50),
+        focus_flag BOOLEAN,
         start_date DATE,
         due_date DATE, 
         sprint_result BOOLEAN,
@@ -81,10 +83,11 @@ connection.connect((err) => {
         task_id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
         sprint_id INT,
         project_id INT,
+        name VARCHAR(100), 
         status_flag VARCHAR(50),
         task_owner VARCHAR(100),
         start_date DATE,
-        end_date DATE, 
+        due_date DATE, 
         CONSTRAINT fk_project_task 
         FOREIGN KEY (project_id) 
         REFERENCES project(project_id)
@@ -150,6 +153,7 @@ app.get('/projects-overview', jwtCheck, checkReadProjectScope, (req, res) => {
 });
 
 
+
 //must have access to the project-data-api and the create:task permission in order to visit the page
 app.get('/create-task', jwtCheck, checkCreateTaskScope, (req, res) => {
   res.json({type: "Create Authorized Task (requires create:task permission)"});
@@ -174,9 +178,35 @@ app.get('/delete-task', jwtCheck, checkDeleteTaskScope, (req, res) => {
 });
 
 
+
+app.post('/create-sprint', jwtCheck, checkCreateSprintScope, (req, res) => {
+  //console.log(req.body.data);
+  const name = req.body.data.newName;
+  const status = req.body.data.newStatus;
+  const startDate = req.body.data.newStartDate;
+  const dueDate = req.body.data.newDueDate;
+  connection.query('INSERT INTO project SET ?', {
+    name: name,
+    status_flag: status,
+    focus_flag: false,
+    start_date: startDate,
+    due_date: dueDate
+  }, (err) => {
+    if (err) throw new Error(err);
+    console.log('Inserted record into table');
+    res.end(); //end the request
+  });
+  res.send('Data received');
+});
+
+
 //must have access to the project-data-api and the create:sprint permission in order to visit the page
 app.get('/create-sprint', jwtCheck, checkCreateSprintScope, (req, res) => {
-  res.json({type: "Create Authorized Sprint (requires create:sprint permission)"});
+  connection.query(`SELECT * FROM project`, (err, result) => {
+    if (err) throw new Error(err);
+    const json = JSON.stringify(result);
+    res.send(json);
+  });
 });
 
 
@@ -227,11 +257,36 @@ app.post('/create-project', jwtCheck, checkCreateProjectScope, (req, res) => {
   res.send('Data received');
 });
 
-
+app.put('/update-project-focus', jwtCheck, checkUpdateProjectScope, (req, res) => {
+  console.log(req.body.data);
+  const focused_id = req.body.data.project_id;
+  console.log(focused_id);
+  connection.query(`UPDATE project SET focus_flag = 1 WHERE project_id = ${focused_id}`, (err) => {
+    if (err) throw new Error(err);
+    res.end(); //end the request
+  });
+  connection.query(`UPDATE project SET focus_flag = 0 WHERE project_id != ${focused_id}`, (err) => {
+    if (err) throw new Error(err);
+    res.end(); //end the request
+  });
+});
 
 //must have access to the project-data-api and the read:sprint permission in order to visit the page
 app.get('/read-project', jwtCheck, checkReadProjectScope, (req, res) => {
-  res.json({type: "Read Authorized Sprint (requires read:project permission)"});
+  const id = req.query.requested_project_id || -1;
+  if (id != -1) {
+    connection.query(`SELECT * FROM project WHERE project_id = ${id}`, (err, result) => {
+      if (err) throw new Error(err);
+      const json = JSON.stringify(result);
+      res.send(json);
+    });
+  } else {
+    connection.query(`SELECT * FROM project WHERE focus_flag = 1`, (err, result) => {
+      if (err) throw new Error(err);
+      const json = JSON.stringify(result);
+      res.send(json);
+    });
+  }
 });
 
 

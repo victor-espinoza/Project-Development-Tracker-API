@@ -1,6 +1,7 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const mysql = require('mysql');
+const async  = require('async');
 require('dotenv').config();
 
 const app = express();
@@ -39,6 +40,7 @@ const connection = mysql.createConnection({
   host: process.env.HOST,
   user: process.env.USER,
   password: process.env.DBPASSWORD,
+  multipleStatements: true
 });
 
 //Connect to Database
@@ -81,8 +83,8 @@ connection.connect((err) => {
       //task table definition
       const taskDefinition = `task (
         task_id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+        project_id INT NOT NULL,
         sprint_id INT,
-        project_id INT,
         name VARCHAR(100), 
         status_flag VARCHAR(50),
         task_owner VARCHAR(100),
@@ -135,12 +137,20 @@ app.get('/private', jwtCheck, (req, res) => {
 
 //must have access to the project-data-api and the read:task permission in order to visit the page
 app.get('/tasks-overview', jwtCheck, checkReadTaskScope, (req, res) => {
-  res.json({type: "Read Authorized Tasks (requires read:task permission)"});
+  connection.query(`SELECT * FROM task`, (err, result) => {
+    if (err) throw new Error(err);
+    const json = JSON.stringify(result);
+    res.send(json);
+  });
 });
 
 //must have access to the project-data-api and the read:task permission in order to visit the page
 app.get('/sprints-overview', jwtCheck, checkReadSprintScope, (req, res) => {
-  res.json({type: "Read Authorized Sprints (requires read:sprint permission)"});
+  connection.query(`SELECT * FROM sprint`, (err, result) => {
+    if (err) throw new Error(err);
+    const json = JSON.stringify(result);
+    res.send(json);
+  });
 });
 
 //must have access to the project-data-api and the read:task permission in order to visit the page
@@ -152,17 +162,72 @@ app.get('/projects-overview', jwtCheck, checkReadProjectScope, (req, res) => {
   });
 });
 
+app.post('/create-task', jwtCheck, checkCreateTaskScope, (req, res) => {
+  console.log(req.body.data);
+  const projectId = req.body.data.projectId;
+  const name = req.body.data.newName;
+  const status = req.body.data.newStatus;
+  const owner = req.body.data.owner;
+  const startDate = req.body.data.newStartDate;
+  const dueDate = req.body.data.newDueDate;
+  connection.query('INSERT INTO task SET ?', {
+    project_id: projectId,
+    name: name,
+    status_flag: status,
+    task_owner: owner,
+    start_date: startDate,
+    due_date: dueDate
+  }, (err) => {
+    if (err) throw new Error(err);
+    console.log('Inserted record into table');
+    res.send({project_id: projectId}); 
+  });
+});
 
 
-//must have access to the project-data-api and the create:task permission in order to visit the page
+//must have access to the project-data-api and the create:sprint permission in order to visit the page
 app.get('/create-task', jwtCheck, checkCreateTaskScope, (req, res) => {
-  res.json({type: "Create Authorized Task (requires create:task permission)"});
+  const projectQuery = "SELECT * FROM project";
+  const sprintQuery = "SELECT * FROM sprint";
+
+  var data = {};
+
+  async.parallel([
+    function(parallel_done) {
+      connection.query(projectQuery, {}, function(err, res) {
+        if (err) return parallel_done(err);
+        data.projects = res;
+        parallel_done();
+      });
+    },
+    function(parallel_done) {
+      connection.query(sprintQuery, {}, function(err, res) {
+        if (err) return parallel_done(err);
+        data.sprints = res;
+        parallel_done();
+      });
+    }
+  ], function(err) {
+    if (err) console.log(err);
+      //connection.end();
+      const json = JSON.stringify(data);
+      res.send(data);
+  });
 });
 
 
 //must have access to the project-data-api and the read:task permission in order to visit the page
 app.get('/read-task', jwtCheck, checkReadTaskScope, (req, res) => {
-  res.json({type: "Read Authorized Task (requires read:task permission)"});
+  const id = req.query.requested_task_id || -1;
+  if (id != -1) {
+    connection.query(`SELECT * FROM task WHERE task_id = ${id}`, (err, result) => {
+      if (err) throw new Error(err);
+      const json = JSON.stringify(result);
+      res.send(json);
+    });
+  } else {
+    res.json({});
+  }
 });
 
 
@@ -173,19 +238,24 @@ app.get('/update-task', jwtCheck, checkUpdateTaskScope, (req, res) => {
 
 
 //must have access to the project-data-api and the delete:task permission in order to visit the page
-app.get('/delete-task', jwtCheck, checkDeleteTaskScope, (req, res) => {
-  res.json({type: "Delete Authorized Task (requires delete:task permission)"});
+app.delete('/delete-task', jwtCheck, checkDeleteTaskScope, (req, res) => {
+  connection.query(`DELETE FROM task WHERE task_id = ${req.body.delete_task_id} `, (err, result) => {
+    if (err) throw new Error(err);
+  });
+  res.end(); 
 });
 
 
 
 app.post('/create-sprint', jwtCheck, checkCreateSprintScope, (req, res) => {
-  //console.log(req.body.data);
+  console.log(req.body.data);
+  const projectId = req.body.data.projectId;
   const name = req.body.data.newName;
   const status = req.body.data.newStatus;
   const startDate = req.body.data.newStartDate;
   const dueDate = req.body.data.newDueDate;
-  connection.query('INSERT INTO project SET ?', {
+  connection.query('INSERT INTO sprint SET ?', {
+    project_id: projectId,
     name: name,
     status_flag: status,
     focus_flag: false,
@@ -196,7 +266,7 @@ app.post('/create-sprint', jwtCheck, checkCreateSprintScope, (req, res) => {
     console.log('Inserted record into table');
     res.end(); //end the request
   });
-  res.send('Data received');
+  res.send({project_id: projectId}); 
 });
 
 
@@ -212,7 +282,20 @@ app.get('/create-sprint', jwtCheck, checkCreateSprintScope, (req, res) => {
 
 //must have access to the project-data-api and the read:sprint permission in order to visit the page
 app.get('/read-sprint', jwtCheck, checkReadSprintScope, (req, res) => {
-  res.json({type: "Read Authorized Sprint (requires read:sprint permission)"});
+  const id = req.query.requested_sprint_id || -1;
+  if (id != -1) {
+    connection.query(`SELECT * FROM sprint WHERE sprint_id = ${id}`, (err, result) => {
+      if (err) throw new Error(err);
+      const json = JSON.stringify(result);
+      res.send(json);
+    });
+  } else {
+    connection.query(`SELECT * FROM sprint WHERE focus_flag = 1`, (err, result) => {
+      if (err) throw new Error(err);
+      const json = JSON.stringify(result);
+      res.send(json);
+    });
+  }
 });
 
 
@@ -225,6 +308,15 @@ app.get('/update-sprint', jwtCheck, checkUpdateSprintScope, (req, res) => {
 //requires access to the priject-data-api and the delete:sprint permission in order to visit the page 
 app.get('/delete-sprint', jwtCheck, checkDeleteSprintScope, (req, res) => {
   res.json({type: "Delete Authorized Sprint (requires delete:sprint permission)"});
+});
+
+
+//must have access to the project-data-api and the delete:task permission in order to visit the page
+app.delete('/delete-sprint', jwtCheck, checkDeleteTaskScope, (req, res) => {
+  connection.query(`DELETE FROM sprint WHERE sprint_id = ${req.body.delete_sprint_id} `, (err, result) => {
+    if (err) throw new Error(err);
+  });
+  res.end(); 
 });
 
 
@@ -258,7 +350,6 @@ app.post('/create-project', jwtCheck, checkCreateProjectScope, (req, res) => {
 });
 
 app.put('/update-project-focus', jwtCheck, checkUpdateProjectScope, (req, res) => {
-  console.log(req.body.data);
   const focused_id = req.body.data.project_id;
   console.log(focused_id);
   connection.query(`UPDATE project SET focus_flag = 1 WHERE project_id = ${focused_id}`, (err) => {
@@ -270,6 +361,21 @@ app.put('/update-project-focus', jwtCheck, checkUpdateProjectScope, (req, res) =
     res.end(); //end the request
   });
 });
+
+
+app.put('/update-sprint-focus', jwtCheck, checkUpdateProjectScope, (req, res) => {
+  const focused_id = req.body.data.sprint_id;
+  console.log(focused_id);
+  connection.query(`UPDATE sprint SET focus_flag = 1 WHERE sprint_id = ${focused_id}`, (err) => {
+    if (err) throw new Error(err);
+    res.end(); //end the request
+  });
+  connection.query(`UPDATE sprint SET focus_flag = 0 WHERE sprint_id != ${focused_id}`, (err) => {
+    if (err) throw new Error(err);
+    res.end(); //end the request
+  });
+});
+
 
 //must have access to the project-data-api and the read:sprint permission in order to visit the page
 app.get('/read-project', jwtCheck, checkReadProjectScope, (req, res) => {
@@ -299,6 +405,14 @@ app.get('/update-project', jwtCheck, checkUpdateProjectScope, (req, res) => {
 //requires access to the priject-data-api and the delete:sprint permission in order to visit the page 
 app.get('/delete-project', jwtCheck, checkDeleteProjectScope, (req, res) => {
   res.json({type: "Delete Authorized Sprint (requires delete:project permission)"});
+});
+
+//must have access to the project-data-api and the delete:task permission in order to visit the page
+app.delete('/delete-project', jwtCheck, checkDeleteTaskScope, (req, res) => {
+  connection.query(`DELETE FROM project WHERE project_id = ${req.body.delete_project_id} `, (err, result) => {
+    if (err) throw new Error(err);
+  });
+  res.end(); 
 });
 
 

@@ -163,7 +163,6 @@ app.get('/projects-overview', jwtCheck, checkReadProjectScope, (req, res) => {
 });
 
 app.post('/create-task', jwtCheck, checkCreateTaskScope, (req, res) => {
-  console.log(req.body.data);
   const projectId = req.body.data.projectId;
   const name = req.body.data.newName;
   const status = req.body.data.newStatus;
@@ -248,7 +247,6 @@ app.delete('/delete-task', jwtCheck, checkDeleteTaskScope, (req, res) => {
 
 
 app.post('/create-sprint', jwtCheck, checkCreateSprintScope, (req, res) => {
-  console.log(req.body.data);
   const projectId = req.body.data.projectId;
   const name = req.body.data.newName;
   const status = req.body.data.newStatus;

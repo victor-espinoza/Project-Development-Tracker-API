@@ -396,7 +396,64 @@ app.get('/read-project', jwtCheck, checkReadProjectScope, (req, res) => {
 
 //must have access to the project-data-api and the update:sprint permission in order to visit the page
 app.get('/update-project', jwtCheck, checkUpdateProjectScope, (req, res) => {
-  res.json({type: "Update Authorized Sprint (requires update:project permission)"});
+  const id = req.query.requested_project_id || -1;
+  if (id != -1) {
+    connection.query(`SELECT * FROM project WHERE project_id = ${id}`, (err, result) => {
+      if (err) throw new Error(err);
+      const json = JSON.stringify(result);
+      res.send(json);
+    });
+  } else {
+    connection.query(`SELECT * FROM project WHERE focus_flag = 1`, (err, result) => {
+      if (err) throw new Error(err);
+      const json = JSON.stringify(result);
+      res.send(json);
+    });
+  }
+});
+
+
+//must have access to the project-data-api and the update:sprint permission in order to visit the page
+app.patch('/update-project', jwtCheck, checkUpdateProjectScope, (req, res) => {
+  console.log("PATCH Request made...");
+  const id = req.body.data.project_id;
+  console.log("Input Values:");
+  console.log(req.body.data);
+  //console.log(req.body.data);
+  const newName = req.body.data.newName;
+  const status = req.body.data.newStatus;
+  const startDate = req.body.data.newStartDate;
+  const dueDate = req.body.data.newDueDate;
+  // let queryRes = {};
+  // connection.query(`SELECT * FROM project WHERE project_id = ${id}`, (err, result) => {
+  //   if (err) throw new Error(err);
+  //   const json = JSON.stringify(result);
+  //   queryRes = json;
+  // });
+  // console.log("Database values:")
+  // console.log(queryRes);
+
+  // connection.query(`UPDATE project SET ? WHERE project_id = ${id}`, {
+  //   name: COALESCE(newName, name),
+  //   status_flag: COALESCE(status, status_flag),
+  //   focus_flag: false,
+  //   start_date: startDate,
+  //   due_date: dueDate
+  // }, (err) => {
+  //   if (err) throw new Error(err);
+  //   console.log('Inserted record into table');
+  //   res.end(); //end the request
+  // });
+
+  // res.send('Data received');
+  // connection.query(`UPDATE project SET focus_flag = 1 WHERE project_id = ${focused_id}`, (err) => {
+  //   if (err) throw new Error(err);
+  //   res.end(); //end the request
+  // });
+  // connection.query(`UPDATE project SET focus_flag = 0 WHERE project_id != ${focused_id}`, (err) => {
+  //   if (err) throw new Error(err);
+  //   res.end(); //end the request
+  // });
 });
 
 

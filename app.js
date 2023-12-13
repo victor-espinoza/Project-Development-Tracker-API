@@ -350,28 +350,52 @@ app.post('/create-project', jwtCheck, checkCreateProjectScope, (req, res) => {
 app.put('/update-project-focus', jwtCheck, checkUpdateProjectScope, (req, res) => {
   const focused_id = req.body.data.project_id;
   console.log(focused_id);
-  connection.query(`UPDATE project SET focus_flag = 1 WHERE project_id = ${focused_id}`, (err) => {
-    if (err) throw new Error(err);
-    res.end(); //end the request
-  });
-  connection.query(`UPDATE project SET focus_flag = 0 WHERE project_id != ${focused_id}`, (err) => {
-    if (err) throw new Error(err);
-    res.end(); //end the request
+  const project_query = `UPDATE project SET focus_flag = 1 WHERE project_id = ${focused_id}`;
+  const other_projects_query = `UPDATE project SET focus_flag = 0 WHERE project_id != ${focused_id}`;
+
+  async.parallel([
+    function(parallel_done) {
+      connection.query(project_query, {}, function(err, res) {
+        if (err) return parallel_done(err);
+        parallel_done();
+      });
+    },
+    function(parallel_done) {
+      connection.query(other_projects_query, {}, function(err, res) {
+        if (err) return parallel_done(err);
+        parallel_done();
+      });
+    }
+  ], function(err) {
+    if (err) console.log(err);
+      res.end();
   });
 });
 
 
 app.put('/update-sprint-focus', jwtCheck, checkUpdateProjectScope, (req, res) => {
   const focused_id = req.body.data.sprint_id;
-  console.log(focused_id);
-  connection.query(`UPDATE sprint SET focus_flag = 1 WHERE sprint_id = ${focused_id}`, (err) => {
-    if (err) throw new Error(err);
-    res.end(); //end the request
+  const sprint_query = `UPDATE sprint SET focus_flag = 1 WHERE sprint_id = ${focused_id}`;
+  const other_sprints_query = `UPDATE sprint SET focus_flag = 0 WHERE sprint_id != ${focused_id}`;
+
+  async.parallel([
+    function(parallel_done) {
+      connection.query(sprint_query, {}, function(err, res) {
+        if (err) return parallel_done(err);
+        parallel_done();
+      });
+    },
+    function(parallel_done) {
+      connection.query(other_sprints_query, {}, function(err, res) {
+        if (err) return parallel_done(err);
+        parallel_done();
+      });
+    }
+  ], function(err) {
+    if (err) console.log(err);
+      res.end();
   });
-  connection.query(`UPDATE sprint SET focus_flag = 0 WHERE sprint_id != ${focused_id}`, (err) => {
-    if (err) throw new Error(err);
-    res.end(); //end the request
-  });
+
 });
 
 
@@ -409,7 +433,41 @@ app.get('/update-project', jwtCheck, checkUpdateProjectScope, (req, res) => {
       const json = JSON.stringify(result);
       res.send(json);
     });
-  }
+  } 
+});
+
+//requires access to the priject-data-api and the delete:sprint permission in order to visit the page 
+app.get('/fix-project-focus', jwtCheck, checkUpdateProjectScope, (req, res) => {
+  console.log("Fix Project Focus Endpoint Reached");
+  console.log(req.query);
+  const id = req.query.requested_project_id;
+
+  const focusQuery = `SELECT focus_flag FROM project WHERE project_id = ${id}`;
+  const focusCountQuery = `SELECT SUM(focus_flag = 1) AS total_checks FROM project`;
+
+  var data = {};
+  data.project_id = id;
+  async.parallel([
+    function(parallel_done) {
+      connection.query(focusQuery, {}, function(err, res) {
+        if (err) return parallel_done(err);
+        data.focus_status = res[0].focus_flag;
+        parallel_done();
+      });
+    },
+    function(parallel_done) {
+      connection.query(focusCountQuery, {}, function(err, res) {
+        if (err) return parallel_done(err);
+        data.total_checks = res[0].total_checks;
+        parallel_done();
+      });
+    }
+  ], function(err) {
+    if (err) console.log(err);
+      //connection.end();
+      const json = JSON.stringify(data);
+      res.send(data);
+  });
 });
 
 
@@ -417,43 +475,36 @@ app.get('/update-project', jwtCheck, checkUpdateProjectScope, (req, res) => {
 app.patch('/update-project', jwtCheck, checkUpdateProjectScope, (req, res) => {
   console.log("PATCH Request made...");
   const id = req.body.data.project_id;
-  console.log("Input Values:");
-  console.log(req.body.data);
+  // console.log("Input Values:");
+  // console.log(req.body.data);
   //console.log(req.body.data);
   const newName = req.body.data.newName;
   const status = req.body.data.newStatus;
+  const focus = req.body.data.focus;
   const startDate = req.body.data.newStartDate;
   const dueDate = req.body.data.newDueDate;
-  // let queryRes = {};
-  // connection.query(`SELECT * FROM project WHERE project_id = ${id}`, (err, result) => {
-  //   if (err) throw new Error(err);
-  //   const json = JSON.stringify(result);
-  //   queryRes = json;
-  // });
-  // console.log("Database values:")
-  // console.log(queryRes);
+  const queryString = `UPDATE project SET ? WHERE project_id = ${id}`;
+  let queryParams = { };
+  if (newName) 
+    queryParams.name = newName;
+  if (status) 
+    queryParams.status_flag = status;
+  if (focus)
+    queryParams.focus_flag = true;
+  if (startDate)
+    queryParams.start_date = startDate;
+  if (dueDate)
+    queryParams.due_date = dueDate;
 
-  // connection.query(`UPDATE project SET ? WHERE project_id = ${id}`, {
-  //   name: COALESCE(newName, name),
-  //   status_flag: COALESCE(status, status_flag),
-  //   focus_flag: false,
-  //   start_date: startDate,
-  //   due_date: dueDate
-  // }, (err) => {
-  //   if (err) throw new Error(err);
-  //   console.log('Inserted record into table');
-  //   res.end(); //end the request
-  // });
+  // console.log("Parameters: ");
+  // console.log(queryParams);
 
-  // res.send('Data received');
-  // connection.query(`UPDATE project SET focus_flag = 1 WHERE project_id = ${focused_id}`, (err) => {
-  //   if (err) throw new Error(err);
-  //   res.end(); //end the request
-  // });
-  // connection.query(`UPDATE project SET focus_flag = 0 WHERE project_id != ${focused_id}`, (err) => {
-  //   if (err) throw new Error(err);
-  //   res.end(); //end the request
-  // });
+  connection.query(queryString, queryParams, (err) => {
+    if (err) throw new Error(err);
+    console.log('Updated Record Sucessfully');
+    res.end(); //end the request
+  });
+  
 });
 
 

@@ -299,7 +299,72 @@ app.get('/read-sprint', jwtCheck, checkReadSprintScope, (req, res) => {
 
 //must have access to the project-data-api and the update:sprint permission in order to visit the page
 app.get('/update-sprint', jwtCheck, checkUpdateSprintScope, (req, res) => {
-  res.json({type: "Update Authorized Sprint (requires update:sprint permission)"});
+  console.log(req.query);
+  const id = req.query.requested_sprint_id || -1;
+  const sprintQuery = `SELECT * FROM sprint WHERE sprint_id = ${id}`;
+  const defaultSprintQuery = "SELECT * FROM sprint WHERE focus_flag = 1";
+  const projectsQuery = `SELECT * FROM project`;
+  var data = {};
+
+  async.parallel([
+    function(parallel_done) {
+      connection.query(((id > 0) ? sprintQuery : defaultSprintQuery), {}, function(err, res) {
+        if (err) return parallel_done(err);
+        data.sprint = res;
+        parallel_done();
+      });
+    },
+    function(parallel_done) {
+      connection.query(projectsQuery, {}, function(err, res) {
+        if (err) return parallel_done(err);
+        data.projects = res;
+        parallel_done();
+      });
+    }
+  ], function(err) {
+    if (err) console.log(err);
+      //connection.end();
+      const json = JSON.stringify(data);
+      res.send(data);
+  });
+
+});
+
+//must have access to the project-data-api and the update:sprint permission in order to visit the page
+app.post('/update-sprint', jwtCheck, checkUpdateSprintScope, (req, res) => {
+  console.log("PATCH Request made...");
+  const projectId = req.body.data.project_id
+  const sprintId = req.body.data.sprint_id;
+  console.log("Input Values:");
+  console.log(req.body.data);
+  const newName = req.body.data.newName;
+  const status = req.body.data.newStatus;
+  const focus = req.body.data.focus;
+  const startDate = req.body.data.newStartDate;
+  const dueDate = req.body.data.newDueDate;
+
+  const queryString = `UPDATE sprint SET ? WHERE sprint_id = ${sprintId}`;
+  let queryParams = { };
+  queryParams.project_id = projectId;
+  if (newName) 
+    queryParams.name = newName;
+  if (status) 
+    queryParams.status_flag = status;
+
+  queryParams.focus_flag = focus;
+  if (startDate)
+    queryParams.start_date = startDate;
+  if (dueDate)
+    queryParams.due_date = dueDate;
+
+  // console.log("Parameters: ");
+  // console.log(queryParams);
+
+  connection.query(queryString, queryParams, (err) => {
+    if (err) throw new Error(err);
+    console.log('Updated Record Sucessfully');
+    res.end(); //end the request
+  });
 });
 
 
@@ -438,10 +503,7 @@ app.get('/update-project', jwtCheck, checkUpdateProjectScope, (req, res) => {
 
 //requires access to the priject-data-api and the delete:sprint permission in order to visit the page 
 app.get('/fix-project-focus', jwtCheck, checkUpdateProjectScope, (req, res) => {
-  console.log("Fix Project Focus Endpoint Reached");
-  console.log(req.query);
   const id = req.query.requested_project_id;
-
   const focusQuery = `SELECT focus_flag FROM project WHERE project_id = ${id}`;
   const focusCountQuery = `SELECT SUM(focus_flag = 1) AS total_checks FROM project`;
 
@@ -471,9 +533,33 @@ app.get('/fix-project-focus', jwtCheck, checkUpdateProjectScope, (req, res) => {
 });
 
 
+//requires access to the priject-data-api and the delete:sprint permission in order to visit the page 
+app.patch('/fix-project-focus', jwtCheck, checkUpdateProjectScope, (req, res) => {
+  console.log("PATCH fix-project-focus Request made...");
+  const id = req.body.data.project_id;
+  const isFocused = req.body.data.isFocused;
+  const checkmarksCount = req.body.data.checkmarksCount;
+  console.log("Input Values:");
+  console.log(req.body.data);
+
+  if (isFocused || checkmarksCount > 1) {
+    connection.query(`UPDATE project SET focus_flag = 0 WHERE project_id != ${id}`, (err, result) => {
+      if (err) throw new Error(err);
+      res.end();
+    });
+  }
+  if (checkmarksCount == 0){
+    connection.query(`UPDATE project SET focus_flag = 1 ORDER BY project_id DESC limit 1`, (err, result) => {
+      if (err) throw new Error(err);
+      res.end();
+    });
+  }
+  res.end();
+});
+
+
 //must have access to the project-data-api and the update:sprint permission in order to visit the page
 app.patch('/update-project', jwtCheck, checkUpdateProjectScope, (req, res) => {
-  console.log("PATCH Request made...");
   const id = req.body.data.project_id;
   // console.log("Input Values:");
   // console.log(req.body.data);
@@ -489,8 +575,8 @@ app.patch('/update-project', jwtCheck, checkUpdateProjectScope, (req, res) => {
     queryParams.name = newName;
   if (status) 
     queryParams.status_flag = status;
-  if (focus)
-    queryParams.focus_flag = true;
+
+  queryParams.focus_flag = focus;
   if (startDate)
     queryParams.start_date = startDate;
   if (dueDate)

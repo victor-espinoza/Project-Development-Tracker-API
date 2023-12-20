@@ -55,7 +55,7 @@ connection.connect((err) => {
         project_id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
         name VARCHAR(100), 
         owner VARCHAR(100) NOT NULL,
-        status_flag VARCHAR(50),
+        project_status VARCHAR(50),
         focus_flag BOOLEAN,
         start_date DATE,
         due_date DATE
@@ -67,7 +67,7 @@ connection.connect((err) => {
         sprint_id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
         project_id INT NOT NULL,
         name VARCHAR(100), 
-        status_flag VARCHAR(50),
+        sprint_status VARCHAR(50),
         focus_flag BOOLEAN,
         start_date DATE,
         due_date DATE, 
@@ -86,7 +86,7 @@ connection.connect((err) => {
         project_id INT NOT NULL,
         sprint_id INT,
         name VARCHAR(100), 
-        status_flag VARCHAR(50),
+        tasK_status VARCHAR(50),
         task_owner VARCHAR(100),
         start_date DATE,
         due_date DATE, 
@@ -138,7 +138,7 @@ app.get('/private', jwtCheck, (req, res) => {
 //must have access to the project-data-api and the read:task permission in order to visit the page
 app.get('/tasks-overview', jwtCheck, checkReadTaskScope, (req, res) => {
   const tasksQuery = "SELECT * FROM task";
-  const sprintsQuery = "SELECT * FROM sprint";
+  const sprintsQuery = "SELECT sprint_id, name FROM sprint";
   const projectsQuery = "SELECT project_id, name FROM project";
   var data = {};
 
@@ -222,7 +222,7 @@ app.post('/create-task', jwtCheck, checkCreateTaskScope, (req, res) => {
   connection.query('INSERT INTO task SET ?', {
     project_id: projectId,
     name: name,
-    status_flag: status,
+    task_status: status,
     task_owner: owner,
     start_date: startDate,
     due_date: dueDate
@@ -236,8 +236,8 @@ app.post('/create-task', jwtCheck, checkCreateTaskScope, (req, res) => {
 
 //must have access to the project-data-api and the create:sprint permission in order to visit the page
 app.get('/create-task', jwtCheck, checkCreateTaskScope, (req, res) => {
-  const projectQuery = "SELECT * FROM project";
-  const sprintQuery = "SELECT * FROM sprint";
+  const projectQuery = "SELECT project_id, name FROM project";
+  const sprintQuery = "SELECT sprint_id, name FROM sprint";
 
   var data = {};
 
@@ -269,10 +269,38 @@ app.get('/create-task', jwtCheck, checkCreateTaskScope, (req, res) => {
 app.get('/read-task', jwtCheck, checkReadTaskScope, (req, res) => {
   const id = req.query.requested_task_id || -1;
   if (id != -1) {
-    connection.query(`SELECT * FROM task WHERE task_id = ${id}`, (err, result) => {
-      if (err) throw new Error(err);
-      const json = JSON.stringify(result);
-      res.send(json);
+    const tasksQuery = `SELECT * FROM task WHERE task_id = ${id}`;
+    const sprintsQuery = "SELECT sprint_id, name FROM sprint";
+    const projectsQuery = "SELECT project_id, name FROM project";
+    var data = {};
+
+    async.parallel([
+      function(parallel_done) {
+        connection.query(tasksQuery, {}, function(err, res) {
+          if (err) return parallel_done(err);
+          data.tasks = res;
+          parallel_done();
+        }); 
+      },
+      function(parallel_done) { 
+        connection.query(sprintsQuery, {}, function(err, res) {
+          if (err) return parallel_done(err);
+          data.sprints = res;
+          parallel_done();
+        });
+      },
+      function(parallel_done) {
+        connection.query(projectsQuery, {}, function(err, res) {
+          if (err) return parallel_done(err);
+          data.projects = res;
+          parallel_done();
+        });
+      }
+    ], function(err) {
+      if (err) console.log(err);
+        //connection.end();
+        const json = JSON.stringify(data);
+        res.send(data);
     });
   } else {
     res.json({});
@@ -282,7 +310,40 @@ app.get('/read-task', jwtCheck, checkReadTaskScope, (req, res) => {
 
 //must have access to the project-data-api and the update:task permission in order to visit the page
 app.get('/update-task', jwtCheck, checkUpdateTaskScope, (req, res) => {
-  res.json({type: "Update Authorized Task (requires update:task permission)"});
+  const id = req.query.requested_task_id;
+  const tasksQuery = `SELECT * FROM task WHERE task_id = ${id}`;
+  const sprintsQuery = "SELECT sprint_id, name FROM sprint";
+  const projectsQuery = "SELECT project_id, name FROM project";
+  var data = {};
+
+  async.parallel([
+    function(parallel_done) {
+      connection.query(tasksQuery, {}, function(err, res) {
+        if (err) return parallel_done(err);
+        data.tasks = res;
+        parallel_done();
+      }); 
+    },
+    function(parallel_done) { 
+      connection.query(sprintsQuery, {}, function(err, res) {
+        if (err) return parallel_done(err);
+        data.sprints = res;
+        parallel_done();
+      });
+    },
+    function(parallel_done) {
+      connection.query(projectsQuery, {}, function(err, res) {
+        if (err) return parallel_done(err);
+        data.projects = res;
+        parallel_done();
+      });
+    }
+  ], function(err) {
+    if (err) console.log(err);
+      //connection.end();
+      const json = JSON.stringify(data);
+      res.send(data);
+  });
 });
 
 
@@ -300,27 +361,30 @@ app.post('/create-sprint', jwtCheck, checkCreateSprintScope, (req, res) => {
   const projectId = req.body.data.projectId;
   const name = req.body.data.newName;
   const status = req.body.data.newStatus;
+  const focus = req.body.data.focus;
   const startDate = req.body.data.newStartDate;
   const dueDate = req.body.data.newDueDate;
   connection.query('INSERT INTO sprint SET ?', {
     project_id: projectId,
     name: name,
-    status_flag: status,
-    focus_flag: false,
+    sprint_status: status,
+    focus_flag: focus,
     start_date: startDate,
     due_date: dueDate
   }, (err) => {
     if (err) throw new Error(err);
-    console.log('Inserted record into table');
-    res.end(); //end the request
+    connection.query('SELECT * FROM sprint where sprint_id = LAST_INSERT_ID()', (err, result) => {
+      if (err) throw new Error(err);
+      const json = JSON.stringify(result);
+      res.send(json);
+    }); 
   });
-  res.send({project_id: projectId}); 
 });
 
 
 //must have access to the project-data-api and the create:sprint permission in order to visit the page
 app.get('/create-sprint', jwtCheck, checkCreateSprintScope, (req, res) => {
-  connection.query(`SELECT * FROM project`, (err, result) => {
+  connection.query(`SELECT project_id, name FROM project`, (err, result) => {
     if (err) throw new Error(err);
     const json = JSON.stringify(result);
     res.send(json);
@@ -331,19 +395,33 @@ app.get('/create-sprint', jwtCheck, checkCreateSprintScope, (req, res) => {
 //must have access to the project-data-api and the read:sprint permission in order to visit the page
 app.get('/read-sprint', jwtCheck, checkReadSprintScope, (req, res) => {
   const id = req.query.requested_sprint_id || -1;
-  if (id != -1) {
-    connection.query(`SELECT * FROM sprint WHERE sprint_id = ${id}`, (err, result) => {
-      if (err) throw new Error(err);
-      const json = JSON.stringify(result);
-      res.send(json);
-    });
-  } else {
-    connection.query(`SELECT * FROM sprint WHERE focus_flag = 1`, (err, result) => {
-      if (err) throw new Error(err);
-      const json = JSON.stringify(result);
-      res.send(json);
-    });
-  }
+  console.log(id);
+  const defaultSprintsQuery = `SELECT * FROM sprint WHERE focus_flag = 1`;
+  const sprintsQuery = `SELECT * FROM sprint WHERE sprint_id = ${id}`;
+  const projectsQuery = "SELECT project_id, name FROM project";
+  var data = {};
+
+  async.parallel([
+    function(parallel_done) { 
+      connection.query((id != -1) ? sprintsQuery: defaultSprintsQuery, {}, function(err, res) {
+        if (err) return parallel_done(err);
+        data.sprints = res;
+        parallel_done();
+      });
+    },
+    function(parallel_done) {
+      connection.query(projectsQuery, {}, function(err, res) {
+        if (err) return parallel_done(err);
+        data.projects = res;
+        parallel_done();
+      });
+    }
+  ], function(err) {
+    if (err) console.log(err);
+      //connection.end();
+      const json = JSON.stringify(data);
+      res.send(data);
+  });
 });
 
 
@@ -395,7 +473,7 @@ app.patch('/update-sprint', jwtCheck, checkUpdateSprintScope, (req, res) => {
   if (newName) 
     queryParams.name = newName;
   if (status) 
-    queryParams.status_flag = status;
+    queryParams.sprint_status = status;
 
   queryParams.focus_flag = focus;
   if (startDate)
@@ -489,22 +567,25 @@ app.get('/create-project', jwtCheck, checkCreateProjectScope, (req, res) => {
 app.post('/create-project', jwtCheck, checkCreateProjectScope, (req, res) => {
   const name = req.body.data.newName;
   const owner = req.auth.payload.sub;
+  const focus = req.body.data.focus ;
   const status = req.body.data.newStatus;
   const startDate = req.body.data.newStartDate;
   const dueDate = req.body.data.newDueDate;
   connection.query('INSERT INTO project SET ?', {
     name: name,
     owner: owner,
-    status_flag: status,
-    focus_flag: false,
+    project_status: status,
+    focus_flag: focus,
     start_date: startDate,
     due_date: dueDate
   }, (err) => {
     if (err) throw new Error(err);
-    console.log('Inserted record into table');
-    res.end(); //end the request
+    connection.query('SELECT LAST_INSERT_ID() AS project_id', (err, result) => {
+      if (err) throw new Error(err);
+      const json = JSON.stringify(result);
+      res.send(json);
+    }); 
   });
-  res.send('Data received');
 });
 
 app.put('/update-project-focus', jwtCheck, checkUpdateProjectScope, (req, res) => {
@@ -662,7 +743,7 @@ app.patch('/update-project', jwtCheck, checkUpdateProjectScope, (req, res) => {
   if (newName) 
     queryParams.name = newName;
   if (status) 
-    queryParams.status_flag = status;
+    queryParams.project_status = status;
 
   queryParams.focus_flag = focus;
   if (startDate)

@@ -1,4 +1,5 @@
 const express = require('express');
+const moment = require('moment'); 
 const bodyParser = require('body-parser');
 const mysql = require('mysql');
 const async  = require('async');
@@ -86,18 +87,23 @@ connection.connect((err) => {
         project_id INT NOT NULL,
         sprint_id INT,
         name VARCHAR(100), 
-        tasK_status VARCHAR(50),
+        task_status VARCHAR(50),
         task_owner VARCHAR(100),
         start_date DATE,
         due_date DATE, 
-        CONSTRAINT fk_project_task 
+        CONSTRAINT fk_sprint_task
+        FOREIGN KEY (sprint_id) 
+        REFERENCES sprint(sprint_id)
+          ON UPDATE CASCADE
+          ON DELETE CASCADE,
+        CONSTRAINT fk_project_task
         FOREIGN KEY (project_id) 
         REFERENCES project(project_id)
           ON UPDATE CASCADE
           ON DELETE CASCADE,
-        CONSTRAINT fk_sprint 
-        FOREIGN KEY (sprint_id) 
-        REFERENCES sprint(sprint_id)
+        CONSTRAINT fk_sprint_project
+        FOREIGN KEY (project_id, sprint_id) 
+        REFERENCES sprint(project_id, sprint_id)
           ON UPDATE CASCADE
           ON DELETE CASCADE
       )`
@@ -312,7 +318,7 @@ app.get('/read-task', jwtCheck, checkReadTaskScope, (req, res) => {
 app.get('/update-task', jwtCheck, checkUpdateTaskScope, (req, res) => {
   const id = req.query.requested_task_id;
   const tasksQuery = `SELECT * FROM task WHERE task_id = ${id}`;
-  const sprintsQuery = "SELECT sprint_id, name FROM sprint";
+  const sprintsQuery = "SELECT sprint_id, project_id, name FROM sprint";
   const projectsQuery = "SELECT project_id, name FROM project";
   var data = {};
 
@@ -344,6 +350,71 @@ app.get('/update-task', jwtCheck, checkUpdateTaskScope, (req, res) => {
       const json = JSON.stringify(data);
       res.send(data);
   });
+});
+
+//must have access to the project-data-api and the update:sprint permission in order to visit the page
+app.patch('/update-task', jwtCheck, checkUpdateProjectScope, (req, res) => {
+  const taskId = req.body.data.task_id;
+  const projectId = req.body.data.project_id;
+  const sprintId = req.body.data.sprint_id;
+  const sprintName = req.body.data.sprintName;
+  const newName = req.body.data.newName;
+  const owner = req.body.data.newOwner;
+  const status = req.body.data.newStatus;
+  const startDate = req.body.data.newStartDate;
+  const dueDate = req.body.data.newDueDate;
+
+  const queryString = `UPDATE task SET ? WHERE task_id = ${taskId}`;
+  let queryParams = { };
+  if (sprintName) {
+    queryParams.project_id = projectId;
+    queryParams.sprint_id = sprintId;
+  }
+  if (newName) 
+    queryParams.name = newName;
+  if (status) 
+    queryParams.project_status = status;
+  if (owner) 
+  queryParams.task_owner = owner;
+  if (startDate)
+    queryParams.start_date = startDate;
+  if (dueDate)
+    queryParams.due_date = dueDate;
+
+  console.log(queryParams);
+
+  if (sprintId < 0 && sprintName) {
+    console.log("Not A Valid Sprint Name...");
+    // connection.query(queryString, queryParams, (err) => {
+    //   if (err) throw new Error(err);
+    //   res.end(); //end the request
+    // });
+    connection.query(`INSERT INTO sprint SET ?; SELECT LAST_INSERT_ID();`, {
+      project_id: projectId,
+      name: sprintName,
+      status: "In Progress",
+      focus_flag: false,
+      start_date: new Date(),
+      due_date: moment(new Date()).add(7, 'D').toDate()
+    }, (err) => {
+      if (err) throw new Error(err);
+      const json = JSON.stringify(result);
+      res.send(json);
+    });
+  } else {
+    connection.query(queryString, queryParams, (err) => {
+      if (err) console.log("Foreign constraint fails");
+      res.end(); //end the request
+    });
+
+  }
+
+
+  // connection.query(queryString, queryParams, (err) => {
+  //   if (err) throw new Error(err);
+  //   res.end(); //end the request
+  // });
+  // res.end();
 });
 
 
@@ -483,7 +554,6 @@ app.patch('/update-sprint', jwtCheck, checkUpdateSprintScope, (req, res) => {
 
   connection.query(queryString, queryParams, (err) => {
     if (err) throw new Error(err);
-    console.log('Updated Record Sucessfully');
     res.end(); //end the request
   });
 }); 
@@ -753,10 +823,8 @@ app.patch('/update-project', jwtCheck, checkUpdateProjectScope, (req, res) => {
 
   connection.query(queryString, queryParams, (err) => {
     if (err) throw new Error(err);
-    console.log('Updated Record Sucessfully');
     res.end(); //end the request
   });
-  
 });
 
 

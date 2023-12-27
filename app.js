@@ -242,8 +242,8 @@ app.post('/create-task', jwtCheck, checkCreateTaskScope, (req, res) => {
 
 //must have access to the project-data-api and the create:sprint permission in order to visit the page
 app.get('/create-task', jwtCheck, checkCreateTaskScope, (req, res) => {
-  const projectQuery = "SELECT project_id, name FROM project";
-  const sprintQuery = "SELECT sprint_id, name FROM sprint";
+  const projectQuery = "SELECT project_id, name, focus_flag FROM project";
+  const sprintQuery = "SELECT sprint_id, project_id, name FROM sprint";
 
   var data = {};
 
@@ -354,6 +354,7 @@ app.get('/update-task', jwtCheck, checkUpdateTaskScope, (req, res) => {
 
 //must have access to the project-data-api and the update:sprint permission in order to visit the page
 app.patch('/update-task', jwtCheck, checkUpdateProjectScope, (req, res) => {
+  console.log(req.body.data);
   const taskId = req.body.data.task_id;
   const projectId = req.body.data.project_id;
   const sprintId = req.body.data.sprint_id;

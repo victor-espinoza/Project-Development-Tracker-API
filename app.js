@@ -219,24 +219,56 @@ app.get('/projects-overview', jwtCheck, checkReadProjectScope, (req, res) => {
 });
 
 app.post('/create-task', jwtCheck, checkCreateTaskScope, (req, res) => {
-  const projectId = req.body.data.projectId;
-  const name = req.body.data.newName;
+  const projectId = req.body.data.project_id;
+  const sprintId = req.body.data.sprint_id;
+  const sprintName = req.body.data.sprintName;
+  const newName = req.body.data.newName;
+  const owner = req.body.data.newOwner;
   const status = req.body.data.newStatus;
-  const owner = req.body.data.owner;
   const startDate = req.body.data.newStartDate;
   const dueDate = req.body.data.newDueDate;
-  connection.query('INSERT INTO task SET ?', {
-    project_id: projectId,
-    name: name,
-    task_status: status,
-    task_owner: owner,
-    start_date: startDate,
-    due_date: dueDate
-  }, (err) => {
-    if (err) throw new Error(err);
-    console.log('Inserted record into table');
-    res.send({project_id: projectId}); 
-  });
+
+  const queryString = `INSERT INTO task SET ?`;
+  let queryParams = { };
+  queryParams.project_id = projectId;
+  if (sprintName)
+    queryParams.sprint_id = sprintId;
+  if (newName) 
+    queryParams.name = newName;
+  if (status) 
+    queryParams.task_status = status;
+  if (owner) 
+  queryParams.task_owner = owner;
+  if (startDate)
+    queryParams.start_date = startDate;
+  if (dueDate)
+    queryParams.due_date = dueDate;
+
+
+  if (sprintId < 0 && sprintName) {
+    console.log(projectId);
+    connection.query(`INSERT INTO sprint SET ?; SELECT LAST_INSERT_ID() AS sID;`, {
+      project_id: projectId,
+      name: sprintName,
+      sprint_status: "In Progress",
+      focus_flag: false,
+      start_date: new Date(),
+      due_date: moment(new Date()).add(7, 'D').toDate()
+    }, (err, result) => {
+      if (err) throw new Error(err);
+      queryParams.sprint_id = JSON.stringify((result[1])[0].sID);
+      connection.query(queryString, queryParams, (err) => {
+        if (err) console.log("Foreign constraint fails");
+        res.send({project_id: projectId});
+      });
+    });
+  } else {
+    connection.query(queryString, queryParams, (err) => {
+      if (err) console.log("Foreign constraint fails");
+      res.send({project_id: projectId});
+    });
+  }
+
 });
 
 
@@ -276,7 +308,7 @@ app.get('/read-task', jwtCheck, checkReadTaskScope, (req, res) => {
   const id = req.query.requested_task_id || -1;
   if (id != -1) {
     const tasksQuery = `SELECT * FROM task WHERE task_id = ${id}`;
-    const sprintsQuery = "SELECT sprint_id, name FROM sprint";
+    const sprintsQuery = "SELECT sprint_id, project_id, name FROM sprint";
     const projectsQuery = "SELECT project_id, name FROM project";
     var data = {};
 
@@ -354,7 +386,6 @@ app.get('/update-task', jwtCheck, checkUpdateTaskScope, (req, res) => {
 
 //must have access to the project-data-api and the update:sprint permission in order to visit the page
 app.patch('/update-task', jwtCheck, checkUpdateProjectScope, (req, res) => {
-  console.log(req.body.data);
   const taskId = req.body.data.task_id;
   const projectId = req.body.data.project_id;
   const sprintId = req.body.data.sprint_id;
@@ -374,7 +405,7 @@ app.patch('/update-task', jwtCheck, checkUpdateProjectScope, (req, res) => {
   if (newName) 
     queryParams.name = newName;
   if (status) 
-    queryParams.project_status = status;
+    queryParams.task_status = status;
   if (owner) 
   queryParams.task_owner = owner;
   if (startDate)
@@ -382,40 +413,29 @@ app.patch('/update-task', jwtCheck, checkUpdateProjectScope, (req, res) => {
   if (dueDate)
     queryParams.due_date = dueDate;
 
-  console.log(queryParams);
 
   if (sprintId < 0 && sprintName) {
-    console.log("Not A Valid Sprint Name...");
-    // connection.query(queryString, queryParams, (err) => {
-    //   if (err) throw new Error(err);
-    //   res.end(); //end the request
-    // });
-    connection.query(`INSERT INTO sprint SET ?; SELECT LAST_INSERT_ID();`, {
+    connection.query(`INSERT INTO sprint SET ?; SELECT LAST_INSERT_ID() AS sID;`, {
       project_id: projectId,
       name: sprintName,
-      status: "In Progress",
+      sprint_status: "In Progress",
       focus_flag: false,
       start_date: new Date(),
       due_date: moment(new Date()).add(7, 'D').toDate()
-    }, (err) => {
+    }, (err, result) => {
       if (err) throw new Error(err);
-      const json = JSON.stringify(result);
-      res.send(json);
+      queryParams.sprint_id = JSON.stringify((result[1])[0].sID);
+      connection.query(queryString, queryParams, (err) => {
+        if (err) console.log("Foreign constraint fails");
+        res.end(); //end the request
+      });
     });
   } else {
     connection.query(queryString, queryParams, (err) => {
       if (err) console.log("Foreign constraint fails");
       res.end(); //end the request
     });
-
   }
-
-
-  // connection.query(queryString, queryParams, (err) => {
-  //   if (err) throw new Error(err);
-  //   res.end(); //end the request
-  // });
-  // res.end();
 });
 
 

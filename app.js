@@ -73,6 +73,8 @@ connection.connect((err) => {
         start_date DATE,
         due_date DATE, 
         sprint_result BOOLEAN,
+        sprint_review MEDIUMTEXT,
+        sprint_retrospective MEDIUMTEXT,
         CONSTRAINT fk_project 
         FOREIGN KEY (project_id) 
         REFERENCES project(project_id)
@@ -143,7 +145,7 @@ app.get('/private', jwtCheck, (req, res) => {
 
 //must have access to the project-data-api and the read:task permission in order to visit the page
 app.get('/tasks-overview', jwtCheck, checkReadTaskScope, (req, res) => {
-  const tasksQuery = "SELECT * FROM task";
+  const tasksQuery = "SELECT * FROM task ORDER BY sprint_id DESC, task_id DESC";
   const sprintsQuery = "SELECT sprint_id, name FROM sprint";
   const projectsQuery = "SELECT project_id, name FROM project";
   var data = {};
@@ -181,7 +183,7 @@ app.get('/tasks-overview', jwtCheck, checkReadTaskScope, (req, res) => {
 
 //must have access to the project-data-api and the read:task permission in order to visit the page
 app.get('/sprints-overview', jwtCheck, checkReadSprintScope, (req, res) => {
-  const sprintQuery = "SELECT * FROM sprint";
+  const sprintQuery = "SELECT * FROM sprint WHERE project_id = (SELECT project_id FROM project WHERE focus_flag = 1) ORDER BY due_date DESC";
   const projectsQuery = "SELECT project_id, name FROM project";
   var data = {};
 
@@ -221,6 +223,7 @@ app.get('/projects-overview', jwtCheck, checkReadProjectScope, (req, res) => {
 app.post('/create-task', jwtCheck, checkCreateTaskScope, (req, res) => {
   const projectId = req.body.data.project_id;
   const sprintId = req.body.data.sprint_id;
+  const defaultSprintId = req.body.data.default_sprint_id
   const sprintName = req.body.data.sprintName;
   const newName = req.body.data.newName;
   const owner = req.body.data.newOwner;
@@ -231,8 +234,7 @@ app.post('/create-task', jwtCheck, checkCreateTaskScope, (req, res) => {
   const queryString = `INSERT INTO task SET ?`;
   let queryParams = { };
   queryParams.project_id = projectId;
-  if (sprintName)
-    queryParams.sprint_id = sprintId;
+  queryParams.sprint_id = (sprintName) ? sprintId : defaultSprintId;
   if (newName) 
     queryParams.name = newName;
   if (status) 
@@ -275,7 +277,7 @@ app.post('/create-task', jwtCheck, checkCreateTaskScope, (req, res) => {
 //must have access to the project-data-api and the create:sprint permission in order to visit the page
 app.get('/create-task', jwtCheck, checkCreateTaskScope, (req, res) => {
   const projectQuery = "SELECT project_id, name, focus_flag FROM project";
-  const sprintQuery = "SELECT sprint_id, project_id, name FROM sprint";
+  const sprintQuery = "SELECT sprint_id, project_id, name, focus_flag FROM sprint";
 
   var data = {};
 
@@ -350,7 +352,7 @@ app.get('/read-task', jwtCheck, checkReadTaskScope, (req, res) => {
 app.get('/update-task', jwtCheck, checkUpdateTaskScope, (req, res) => {
   const id = req.query.requested_task_id;
   const tasksQuery = `SELECT * FROM task WHERE task_id = ${id}`;
-  const sprintsQuery = "SELECT sprint_id, project_id, name FROM sprint";
+  const sprintsQuery = "SELECT sprint_id, project_id, name, focus_flag FROM sprint";
   const projectsQuery = "SELECT project_id, name FROM project";
   var data = {};
 
@@ -389,6 +391,7 @@ app.patch('/update-task', jwtCheck, checkUpdateProjectScope, (req, res) => {
   const taskId = req.body.data.task_id;
   const projectId = req.body.data.project_id;
   const sprintId = req.body.data.sprint_id;
+  const defaultSprintId = req.body.data.default_sprint_id
   const sprintName = req.body.data.sprintName;
   const newName = req.body.data.newName;
   const owner = req.body.data.newOwner;
@@ -398,10 +401,8 @@ app.patch('/update-task', jwtCheck, checkUpdateProjectScope, (req, res) => {
 
   const queryString = `UPDATE task SET ? WHERE task_id = ${taskId}`;
   let queryParams = { };
-  if (sprintName) {
-    queryParams.project_id = projectId;
-    queryParams.sprint_id = sprintId;
-  }
+  queryParams.project_id = projectId;
+  queryParams.sprint_id = (sprintName) ? sprintId : defaultSprintId;
   if (newName) 
     queryParams.name = newName;
   if (status) 

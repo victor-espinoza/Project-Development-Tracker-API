@@ -457,13 +457,19 @@ app.post('/create-sprint', jwtCheck, checkCreateSprintScope, (req, res) => {
   const focus = req.body.data.focus;
   const startDate = req.body.data.newStartDate;
   const dueDate = req.body.data.newDueDate;
+  const sprintReview = req.body.data.newSprintReview;
+  const sprintRetrospective = req.body.data.newSprintRetrospective;
+
   connection.query('INSERT INTO sprint SET ?', {
     project_id: projectId,
     name: name,
     sprint_status: status,
     focus_flag: focus,
     start_date: startDate,
-    due_date: dueDate
+    due_date: dueDate,
+    sprint_review: sprintReview,
+    sprint_retrospective: sprintRetrospective
+
   }, (err) => {
     if (err) throw new Error(err);
     connection.query('SELECT * FROM sprint where sprint_id = LAST_INSERT_ID()', (err, result) => {

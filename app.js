@@ -563,6 +563,8 @@ app.patch('/update-sprint', jwtCheck, checkUpdateSprintScope, (req, res) => {
   const newName = req.body.data.newName; 
   const status = req.body.data.newStatus;
   const focus = req.body.data.focus;
+  const review = req.body.data.newSprintReview;
+  const retrospective = req.body.data.newSprintRetrospective;
   const startDate = req.body.data.newStartDate;
   const dueDate = req.body.data.newDueDate;
 
@@ -579,6 +581,10 @@ app.patch('/update-sprint', jwtCheck, checkUpdateSprintScope, (req, res) => {
     queryParams.start_date = startDate;
   if (dueDate)
     queryParams.due_date = dueDate;
+  if (review)
+    queryParams.sprint_review = review;
+  if (retrospective)
+    queryParams.sprint_retrospective = retrospective;
 
   connection.query(queryString, queryParams, (err) => {
     if (err) throw new Error(err);

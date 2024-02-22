@@ -498,6 +498,7 @@ app.get('/read-sprint', jwtCheck, checkReadSprintScope, (req, res) => {
   const defaultSprintsQuery = `SELECT * FROM sprint WHERE focus_flag = 1`;
   const sprintsQuery = `SELECT * FROM sprint WHERE sprint_id = ${id}`;
   const projectsQuery = "SELECT project_id, name FROM project";
+  const taskQuery = `SELECT * FROM task WHERE sprint_id = ${id}`;
   var data = {};
 
   async.parallel([
@@ -512,6 +513,13 @@ app.get('/read-sprint', jwtCheck, checkReadSprintScope, (req, res) => {
       connection.query(projectsQuery, {}, function(err, res) {
         if (err) return parallel_done(err);
         data.projects = res;
+        parallel_done();
+      });
+    },
+    function(parallel_done) {
+      connection.query(taskQuery, {}, function(err, res) {
+        if (err) return parallel_done(err);
+        data.tasks = res;
         parallel_done();
       });
     }

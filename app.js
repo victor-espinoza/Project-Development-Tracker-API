@@ -494,16 +494,14 @@ app.get('/create-sprint', jwtCheck, checkCreateSprintScope, (req, res) => {
 //must have access to the project-data-api and the read:sprint permission in order to visit the page
 app.get('/read-sprint', jwtCheck, checkReadSprintScope, (req, res) => {
   const id = req.query.requested_sprint_id || -1;
-  console.log(id);
-  const defaultSprintsQuery = `SELECT * FROM sprint WHERE focus_flag = 1`;
-  const sprintsQuery = `SELECT * FROM sprint WHERE sprint_id = ${id}`;
+  const sprintsQuery = (id != -1) ? `SELECT * FROM sprint WHERE sprint_id = ${id}` : `SELECT * FROM sprint WHERE focus_flag = 1`;
   const projectsQuery = "SELECT project_id, name FROM project";
-  const taskQuery = `SELECT * FROM task WHERE sprint_id = ${id}`;
+  const taskQuery = `SELECT * FROM task WHERE sprint_id = ${id} ORDER BY task_id DESC`;
   var data = {};
 
   async.parallel([
     function(parallel_done) { 
-      connection.query((id != -1) ? sprintsQuery: defaultSprintsQuery, {}, function(err, res) {
+      connection.query(sprintsQuery, {}, function(err, res) {
         if (err) return parallel_done(err);
         data.sprints = res;
         parallel_done();
@@ -537,7 +535,7 @@ app.get('/update-sprint', jwtCheck, checkUpdateSprintScope, (req, res) => {
   const id = req.query.requested_sprint_id || -1;
   const sprintQuery = `SELECT * FROM sprint WHERE sprint_id = ${id}`;
   const defaultSprintQuery = "SELECT * FROM sprint WHERE focus_flag = 1";
-  const projectsQuery = `SELECT * FROM project`;
+  const projectsQuery = `SELECT project_id, name FROM project`;
   var data = {};
 
   async.parallel([
@@ -754,19 +752,41 @@ app.put('/update-sprint-focus', jwtCheck, checkUpdateProjectScope, (req, res) =>
 //must have access to the project-data-api and the read:sprint permission in order to visit the page
 app.get('/read-project', jwtCheck, checkReadProjectScope, (req, res) => {
   const id = req.query.requested_project_id || -1;
-  if (id != -1) {
-    connection.query(`SELECT * FROM project WHERE project_id = ${id}`, (err, result) => {
-      if (err) throw new Error(err);
-      const json = JSON.stringify(result);
-      res.send(json);
-    });
-  } else {
-    connection.query(`SELECT * FROM project WHERE focus_flag = 1`, (err, result) => {
-      if (err) throw new Error(err);
-      const json = JSON.stringify(result);
-      res.send(json);
-    }); 
-  }
+  const projectsQuery = (id != -1) ? `SELECT * FROM project WHERE project_id = ${id}` : `SELECT * FROM project WHERE focus_flag = 1 LIMIT 1`;
+  const sprintsQuery = (id != -1) ? `SELECT * FROM sprint WHERE project_id = ${id} ORDER BY sprint_id DESC` : `SELECT * FROM sprint WHERE project_id = (SELECT * FROM project WHERE focus_flag = 1 LIMIT 1) ORDER BY sprint_id DESC`;
+  const tasksQuery = (id != -1) ? `SELECT * FROM task WHERE project_id = ${id} ORDER BY task_id DESC` : `SELECT * FROM task WHERE project_id = (SELECT * FROM project WHERE focus_flag = 1 LIMIT 1) ORDER BY task_id DESC`;
+
+
+  var data = {};
+
+  async.parallel([
+    function(parallel_done) { 
+      connection.query(projectsQuery, {}, function(err, res) {
+        if (err) return parallel_done(err);
+        data.projects = res;
+        parallel_done();
+      });
+    },
+    function(parallel_done) {
+      connection.query(sprintsQuery, {}, function(err, res) {
+        if (err) return parallel_done(err);
+        data.sprints = res;
+        parallel_done();
+      });
+    },
+    function(parallel_done) {
+      connection.query(tasksQuery, {}, function(err, res) {
+        if (err) return parallel_done(err);
+        data.tasks = res;
+        parallel_done();
+      });
+    }
+  ], function(err) {
+    if (err) console.log(err);
+      //connection.end();
+      const json = JSON.stringify(data);
+      res.send(data);
+  });
 });
 
 
